@@ -51,6 +51,9 @@ block_size = 30  # needs to be width floored by 10 OR height floored by 20 for t
 top_left_x = (s_width - play_width) // 2
 top_left_y = s_height - play_height
 
+lvl_cleared_rows = 0    # number of rows to clear until next level is reached
+total_cleared_rows = 0  # total number of rows cleared in a single game
+
 """
 These lists are for each piece in the game, and each nested list is the different orientation each shape can have
 (per piece)
@@ -173,8 +176,8 @@ class Piece(object):
         :param x:
         :param y:
         :param shape:
-        :param color:
-        :param rotation:
+        :color:
+        :rotation:
 
         :return: none
         """
@@ -193,7 +196,7 @@ def create_grid(locked_positions={}):
 
     :param locked_positions: a dictionary of all the positions that are set in place, and are not open for any pieces to
     move to
-    :param grid: the playable/intractable area of the window
+    :grid: the playable/intractable area of the window
 
     :return: grid
     """
@@ -216,8 +219,8 @@ def convert_shape_format(piece):
     Provides the correct positioning after a piece is rotated
 
     :param piece: the colored, movable block set that is in play in any rotational format
-    :param positions: list of positions for each piece to check & draw
-    :param form: gives only the nested piece rotation
+    :positions: list of positions for each piece to check & draw
+    :form: gives only the nested piece rotation
 
     :return: positions
     """
@@ -245,8 +248,8 @@ def valid_space(piece, grid):
 
     :param piece: the colored, movable block set that is in play in any rotational format
     :param grid: the playable/intractable area on the window
-    :param accepted_pos: the positions that the piece can move into
-    :param formatted: the rotational position of the piece
+    :accepted_pos: the positions that the piece can move into
+    :formatted: the rotational position of the piece
 
     :return: boolean value of acceptable move
     """
@@ -299,8 +302,11 @@ def get_shape():
     return Piece(5, 0, random.choice(pieces))   # x pos, y pos, piece
 
 
-def draw_text_middle(text, size, color, surface):
-    pass
+def draw_text_middle(surface, text, size, color):
+    font = pygame.font.SysFont('lucidiaconsole', size, bold=True)
+    label = font.render(text, 1, color)
+
+    surface.blit(label, (top_left_x + play_width / 2 - (label.get_width()/2), top_left_y + play_height / 2 - (label.get_height()/2)))
 
 
 def draw_grid(surface, grid):
@@ -310,8 +316,8 @@ def draw_grid(surface, grid):
 
     :param surface: the area inside the window, not just playable/intractable area
     :param grid: the playable/intractable area of the window
-    :param sx: shorthand local variable for global variable top_left_x
-    :param sy: shorthand local variable for global variable top_left_y
+    :sx: provides x-axis center of window
+    :sy: provides y-axis center of window
 
     :return: None
     """
@@ -335,11 +341,12 @@ def clear_rows(grid, locked):
     :param grid: the playable/intractable area of the window
     :param locked: a dictionary of all the positions that are set in place, and are not open for any pieces to
     move to
-    :param inc: shorthand for increment; the number of shifts that need to occur
-    :param ind: shorthand for index; the row identification number(s)
+    :inc: shorthand for increment; the number of shifts that need to occur
+    :ind: shorthand for index; the row identification number(s)
 
-    :return: None
+    :return: inc
     """
+    global lvl_cleared_rows, total_cleared_rows
 
     inc = 0
     for y in range(len(grid) - 1, -1, -1):      # loops through grid backwards
@@ -353,7 +360,7 @@ def clear_rows(grid, locked):
                 except:
                     continue
 
-    # shift every row down to remove 'floating' parts & adds row on top to replace deleted row
+    # shift necessary row(s) down to remove 'floating' parts & adds row(s) on top to replace deleted row(s)
 
     if inc > 0:     # if removed row is more than 0
         for key in sorted(list(locked), key=lambda x: x[1])[::-1]:
@@ -364,6 +371,11 @@ def clear_rows(grid, locked):
                 locked[new_key] = locked.pop(key)
                 # creates new key in locked (can have same color) in new position
 
+        lvl_cleared_rows += inc     # decreases next level counter by inc
+        total_cleared_rows += inc   # increases total rows cleared by inc
+
+    return inc
+
 
 def draw_next_shape(piece, surface):
     """
@@ -372,15 +384,20 @@ def draw_next_shape(piece, surface):
 
     :param piece: the colored, movable block set that is in play in any rotational format
     :param surface: the area inside the window, not just playable/intractable area
+    :font: The style of text and its size
+    :label: the text 'Next Piece: ' and the piece itself presented on the screen
+    :sx: provides x-axis center of window
+    :sy: provides y-axis center of window
+    :form: provides the image of the next piece
 
     :return: None
     """
 
     font = pygame.font.SysFont('lucidiaconsole', 30)        # provides font style and size of text
-    label = font.render('Next Shape:', 1, (255, 255, 255))      # text to display, antialiasing, and color of font
+    label = font.render('Next Piece:', 1, (255, 255, 255))      # text to display, antialiasing, and color of font
 
-    sx = top_left_x + play_width + 50       # provides top left position
-    sy = top_left_y + play_height/2 - 100       # provides top left position
+    sx = top_left_x + play_width + 50
+    sy = top_left_y + play_height/2 - 100
 
     form = piece.shape[piece.rotation % len(piece.shape)]     # gets the next piece
 
@@ -391,18 +408,53 @@ def draw_next_shape(piece, surface):
                 pygame.draw.rect(surface, piece.color, (sx + x*block_size, sy + y*block_size, block_size, block_size), 0)
                 # draw the part
 
-    surface.blit(label, (sx + 10, sy - 30)) # draws the rectangular container to 'hold' next piece visually
+    surface.blit(label, (sx + 10, sy - 30))
+    # draws the rectangular container to 'hold' next piece visually
 
 
-def draw_window(surface, grid):
+def cleared_rows(surface):
+    """
+
+    This function shows the total number of rows cleared and the number of rows to clear until the next level is reached
+
+    :param surface:
+    :font: The style of text and its size
+    :label: the text 'Rows Cleared: ' and the total cleared rows presented on the screen
+    :label2: the text 'Rows until next level: 'and the number of rows that need to be cleared until the next level is reached
+    :sx: provides x-axis center of window
+    :sy: provides y-axis center of window
+
+    :return: None
+    """
+
+    global lvl_cleared_rows, total_cleared_rows
+
+    font = pygame.font.SysFont('lucidiaconsole', 30)
+    label = font.render('Rows Cleared: {}'.format(total_cleared_rows), 1, (255, 255, 255))
+    label2 = font.render('Rows until next level: {}'.format(5-lvl_cleared_rows), 1, (255, 255, 255))
+    # text to display, antialiasing, and color of font
+
+    sx = play_width - 50
+    sy = play_width/2 + 100
+
+    surface.blit(label, (sx - 235, sy + 100))
+    surface.blit(label2, (sx - 235, sy + 170))
+
+
+def draw_window(surface, grid, score):
     """
 
     Shows the window for the program to display on & updates the grid as pieces are moved
 
     :param surface: the area inside the window, not just playable/intractable area
     :param grid: the playable/intractable area of the window
-    :param font: the type of style in which the text is written on screen
-    :param label: the text presented on the screen, antialiasing, and its color
+    :font: the type of style in which the game title is written on screen
+    :label: the text 'Tetris with Python'
+    :font2: the type of style in which the game score is written on screen
+    :label2: the text 'score:' presented on the screen
+    :label3: the numeric score presented on the screen
+    :sx:provides x-axis center of window
+    :sy: provides y-axis center of window
 
     :return: None
     """
@@ -410,11 +462,20 @@ def draw_window(surface, grid):
     surface.fill((0, 0, 0))   # creates initial black background in window
 
     font = pygame.font.SysFont('lucidiaconsole', 80)    # provides font style and size of text
-
     label = font.render('Tetris with Python', 1, (255, 255, 255))   # text to display, antialiasing, and color of font
+    surface.blit(label, (top_left_x + play_width/2 - (label.get_width()/2), 30))    # dynamic to place in center of window (is position and font size)
 
-    surface.blit(label, (top_left_x + play_width/2 - (label.get_width()/2), 30))    # dynamic to place in center of
-    # window (is position and font size)
+    sx = top_left_x + play_width + 50
+    sy = top_left_y + play_height / 2 - 100
+
+    font2 = pygame.font.SysFont('lucidiaconsole', 50)
+    label2 = font2.render('Score: ', 1, (255, 255, 255))
+    label3 = font2.render('{}'.format(str(score)), 1, (255, 255, 255))
+
+    surface.blit(label2, (sx, sy - 200))
+    surface.blit(label3, (sx, sy - 160))
+
+
 
     for y in range(len(grid)):
         for x in range(len(grid[y])):
@@ -436,19 +497,22 @@ def main(win):
     provides the main functions of the program (the locked positions, the grid, running, current piece, next piece,
     clock, and fall time)
 
-    :param locked_positions: a dictionary of all the positions that are set in place, and are not open for any pieces to
-    :param grid: the playable/intractable area on the window
-    :param change_piece: specifies whether the piece should be changed at a given time
-    :param next_piece: the next piece that will be available to the user
-    :param clock: shows how long a single game has been active
-    :param fall_time: tracks how long since last run loop ran (in milliseconds)
-    :param fall_speed: the time it takes before each shape starts falling (in seconds)
-    :param piece_pos: checks all positions of piece movement downwards to see if piece needs to move down or be locked
+    :param win: shorthand for window
+    :locked_positions: a dictionary of all the positions that are set in place, and are not open for any pieces to
+    :grid: the playable/intractable area on the window
+    :change_piece: specifies whether the piece should be changed at a given time
+    :next_piece: the next piece that will be available to the user
+    :clock: shows how long a single game has been active
+    :fall_time: tracks how long since last run loop ran (in milliseconds)
+    :fall_speed: the time it takes before each shape starts falling (in seconds)
+    :piece_pos: checks all positions of piece movement downwards to see if piece needs to move down or be locked
 
     :return: None
     """
 
     global grid
+    global lvl_cleared_rows
+    global total_cleared_rows
 
     locked_positions = {}
     grid = create_grid(locked_positions)
@@ -458,12 +522,17 @@ def main(win):
     next_piece = get_shape()
     clock = pygame.time.Clock()
     fall_time = 0
+    fall_speed = 0.5
+    score = 0
 
     while run:  # while game is running
-        fall_speed = 0.27
         grid = create_grid(locked_positions)    # every time you move, change to add to locked_positions, so update grid
         fall_time += clock.get_rawtime()    # gets amount of time since last clock.tick()
         clock.tick()    # adds a tick to a timer/clock - makes it uniform to every OS
+
+        if lvl_cleared_rows >= 5:   # after 5 or more rows have been cleared
+            fall_speed -= 0.1   # increase fall speed
+            lvl_cleared_rows = 0        # resets number of cleared rows for level
 
         if fall_time/1000 >= fall_speed:     # if the piece has been in a stationary position longer than the fall speed
             fall_time = 0   # resets fall_time
@@ -473,10 +542,9 @@ def main(win):
                 change_piece = True     # stops current piece movement & gets next one in play (& active)
 
         for event in pygame.event.get():    # while something is happening
-            if event.type == pygame.QUIT:   # if player decides to quit
-                run = False     # exits loop, stops game, exits window
+            if event.type == pygame.QUIT:   # if player decides to quit via X key
+                run = False     # exits loop
                 pygame.display.quit()
-                quit()
 
             if event.type == pygame.KEYDOWN:    # if player pushes a key
                 if event.key == pygame.K_LEFT:  # if player pushes left arrow key specifically
@@ -515,15 +583,19 @@ def main(win):
             current_piece = next_piece
             next_piece = get_shape()
             change_piece = False
-            clear_rows(grid, locked_positions)  # only checks to remove row AFTER piece has become stationary
+            score += clear_rows(grid, locked_positions) * 100  # only checks to remove row AFTER piece has become stationary
 
-        draw_window(win, grid)  # updates window with player input & according actions
+
+        draw_window(win, grid, score)  # updates window with player input & according actions
         draw_next_shape(next_piece, win)    # updates window with next piece
+        cleared_rows(win)
         pygame.display.update()     # displays window updates
 
         if check_lost(locked_positions):    # checks to see if game is lost; if so, breaks running while loop
+            draw_text_middle(win, "You Lost - Try Again!", 80, (255, 255, 255))
+            pygame.display.update()
+            pygame.time.delay(1500)
             run = False
-
 
 def main_menu(win):
     """
@@ -532,7 +604,18 @@ def main_menu(win):
     :return: None
     """
 
-    main(win)
+    run = True
+    while run:
+        win.fill((0, 0, 0))
+        draw_text_middle(win, "Press Any Key To Start", 80, (255, 255, 255))
+        pygame.display.update()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+            if event.type == pygame.KEYDOWN:
+                main(win)
+
+    pygame.display.quit()
 
 
 win = pygame.display.set_mode((s_width, s_height))
