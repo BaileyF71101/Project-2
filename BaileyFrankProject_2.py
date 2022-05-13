@@ -441,7 +441,40 @@ def cleared_rows(surface):
     surface.blit(label2, (sx - 235, sy + 170))
 
 
-def draw_window(surface, grid, score):
+def update_score(nscore):
+    """
+
+    This function is to keep track of the current game's score
+
+    :param nscore: the new score, or the present game's score
+
+    :return: None
+    """
+
+    score = highscore()
+
+    with open('scores.txt', 'w',) as f:
+        if int(score) > nscore:
+            f.write(str(score))
+        else:
+            f.write(str(nscore))
+
+
+def highscore():
+    """
+
+    This function is to keep track of the overall best score throughout every game played
+
+    :return: score
+    """
+    with open('scores.txt', 'r',) as f:
+        lines = f.readlines()
+        score = lines[0].strip()
+
+    return score
+
+
+def draw_window(surface, grid, score=0, last_score=0):
     """
 
     Shows the window for the program to display on & updates the grid as pieces are moved
@@ -453,6 +486,8 @@ def draw_window(surface, grid, score):
     :font2: the type of style in which the game score is written on screen
     :label2: the text 'score:' presented on the screen
     :label3: the numeric score presented on the screen
+    :label4: the text 'High Score:' presented on the screen
+    :label5: the numeric high score presented on the screen
     :sx:provides x-axis center of window
     :sy: provides y-axis center of window
 
@@ -471,9 +506,13 @@ def draw_window(surface, grid, score):
     font2 = pygame.font.SysFont('lucidiaconsole', 50)
     label2 = font2.render('Score: ', 1, (255, 255, 255))
     label3 = font2.render('{}'.format(str(score)), 1, (255, 255, 255))
+    label4 = font2.render('High Score: ', 1, (255, 255, 255))
+    label5 = font2.render('{}'.format(last_score), 1, (255, 255, 255))
 
     surface.blit(label2, (sx, sy - 200))
     surface.blit(label3, (sx, sy - 160))
+    surface.blit(label4, (sx - 585, sy - 200))
+    surface.blit(label5, (sx - 585, sy - 160))
 
 
 
@@ -526,6 +565,7 @@ def main(win):
     score = 0
 
     while run:  # while game is running
+        last_score = highscore()
         grid = create_grid(locked_positions)    # every time you move, change to add to locked_positions, so update grid
         fall_time += clock.get_rawtime()    # gets amount of time since last clock.tick()
         clock.tick()    # adds a tick to a timer/clock - makes it uniform to every OS
@@ -586,7 +626,7 @@ def main(win):
             score += clear_rows(grid, locked_positions) * 100  # only checks to remove row AFTER piece has become stationary
 
 
-        draw_window(win, grid, score)  # updates window with player input & according actions
+        draw_window(win, grid, score, last_score)  # updates window with player input & according actions
         draw_next_shape(next_piece, win)    # updates window with next piece
         cleared_rows(win)
         pygame.display.update()     # displays window updates
@@ -596,6 +636,7 @@ def main(win):
             pygame.display.update()
             pygame.time.delay(1500)
             run = False
+            update_score(score)
 
 def main_menu(win):
     """
