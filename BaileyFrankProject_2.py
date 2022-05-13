@@ -42,8 +42,8 @@ play area of the window
 :param top_left_y: in conjunction with top_left_x, is the top left of the play area
 
 """
-s_width = 1000   # window width
-s_height = 900  # window height
+s_width = 800   # window width
+s_height = 750  # window height
 play_width = 300  # needs to be half of play_height for traditional tetris ratio of 10 blocks
 play_height = 600  # needs to be double that of play_width for traditional tetris ratio of 20 blocks
 block_size = 30  # needs to be width floored by 10 OR height floored by 20 for traditional tetris ratio
@@ -162,7 +162,7 @@ The two global variables below are the list of available pieces for the randomiz
 a new piece, as well as the associated color for each piece
 """
 pieces = [S, Z, I, O, J, L, T]  # 0-6 index for pieces
-piece_colors = [(61, 219, 0), (219, 0, 0), (0, 219, 215), (219, 222, 0), (0, 22, 222), (0, 222, 163), (148, 0, 222)]
+piece_colors = [(61, 219, 0), (219, 0, 0), (0, 219, 215), (219, 222, 0), (0, 22, 222), (222, 163, 0), (148, 0, 222)]
 
 
 class Piece(object):
@@ -204,7 +204,7 @@ def create_grid(locked_positions={}):
     for y in range(len(grid)):  # 20, the height of the play area in traditional tetris ratio
         for x in range(len(grid[y])):   # 10, the width of the play area in traditional tetris ratio
             if (x, y) in locked_positions:
-                key = locked_positions[{x, y}]
+                key = locked_positions[(x, y)]
                 grid[y][x] = key
 
     return grid
@@ -219,13 +219,13 @@ def convert_shape_format(piece):
     :param positions: list of positions for each piece to check & draw
     :param form: gives only the nested piece rotation
 
-    :return: None
+    :return: positions
     """
 
     positions = []
     form = piece.shape[piece.rotation % len(piece.shape)]
 
-    for y, line in enumerate(form):     # gets shape & its rotation
+    for y, line in enumerate(form):     # gets piece & its nested lists
         row = list(line)
         for x, column in enumerate(row):    # each item in the nested list
             if column == '0':   # checks if 0 exists in item
@@ -234,6 +234,8 @@ def convert_shape_format(piece):
 
     for i, pos in enumerate(positions):     # gives each position an offset with a constant
         positions[i] = (pos[0]-2, pos[1]-4)     # moves everything left & up
+
+    return positions
 
 
 def valid_space(piece, grid):
@@ -249,19 +251,19 @@ def valid_space(piece, grid):
     :return: boolean value of acceptable move
     """
 
-    accepted_pos = [[(x, y) for x in range(10) if grid[y][x] == (0, 0, 0)] for y in range(20)]     # gets all possible
-                                                                        # positions for 10x20 grid in a tuple form;
-                                                                        # only if space is empty, aka black
+    accepted_pos = [[(x, y) for x in range(10) if grid[y][x] == (0, 0, 0)] for y in range(20)]
+    # gets all possible positions for 10x20 grid in a tuple form; only if space is empty, aka black
 
-    accepted_pos = [x for sub in accepted_pos for x in sub]     # takes all positions in tuple and adds into one
-                                                                # dimentional list by overriding (removes embedding)
+    accepted_pos = [x for sub in accepted_pos for x in sub]
+    # takes all positions in tuple and adds into one dimensional list by overriding (removes embedding)
 
     formatted = convert_shape_format(piece)
 
     for pos in formatted:   # checks to make sure position exists in accepted positions
         if pos not in accepted_pos:
-            if pos[1] > -1:     # when offset by 4, piece spawns above screen; want piece to start falling before
-                                # it's seen; y starts at negative value
+            if pos[1] > -1:
+            # when offset by 4, piece spawns above screen; want piece to start falling before it's seen; y starts at
+            # negative value
                 return False
     return True
 
@@ -292,6 +294,8 @@ def get_shape():
     :return: Piece
     """
 
+    global pieces, piece_colors
+
     return Piece(5, 0, random.choice(pieces))   # x pos, y pos, piece
 
 
@@ -316,7 +320,7 @@ def draw_grid(surface, grid):
     sy = top_left_y
 
     for y in range(len(grid)):
-        pygame.draw.line(surface, (200, 200, 200), (sx, sy + y * block_size), (sx + play_width, sy + y * block_size))
+        pygame.draw.line(surface, (200, 200, 200), (sx, sy + y * block_size), (sx + (play_width - 1), sy + y * block_size))
         # draws 10 vertical lines to show grid; x value static
         for x in range(len(grid[y])):
             pygame.draw.line(surface, (200, 200, 200), (sx + x*block_size, sy), (sx + x*block_size, sy + play_height))
@@ -324,11 +328,70 @@ def draw_grid(surface, grid):
 
 
 def clear_rows(grid, locked):
-    pass
+    """
+
+    This function will clear any full rows that are filled with any part of the pieces
+
+    :param grid: the playable/intractable area of the window
+    :param locked: a dictionary of all the positions that are set in place, and are not open for any pieces to
+    move to
+    :param inc: shorthand for increment; the number of shifts that need to occur
+    :param ind: shorthand for index; the row identification number(s)
+
+    :return: None
+    """
+
+    inc = 0
+    for y in range(len(grid) - 1, -1, -1):      # loops through grid backwards
+        row = grid[y]
+        if (0, 0, 0) not in row:    # if the row doesn't contain the color black
+            inc += 1
+            ind = y
+            for x in range(len(row)):   # get every position in row
+                try:
+                    del locked[(x, y)]      # removes row
+                except:
+                    continue
+
+    # shift every row down to remove 'floating' parts & adds row on top to replace deleted row
+
+    if inc > 0:     # if removed row is more than 0
+        for key in sorted(list(locked), key=lambda x: x[1])[::-1]:
+            # for every key in sorted locked list based on y value
+            x, y = key      # gets position
+            if y < ind:     # if y is above current index of row removed
+                new_key = (x, y + inc)      # increments by certain value to shift down
+                locked[new_key] = locked.pop(key)
+                # creates new key in locked (can have same color) in new position
 
 
-def draw_next_shape(shape, surface):
-    pass
+def draw_next_shape(piece, surface):
+    """
+
+    This function shows the upcoming piece that will be played after the current piece is locked into position
+
+    :param piece: the colored, movable block set that is in play in any rotational format
+    :param surface: the area inside the window, not just playable/intractable area
+
+    :return: None
+    """
+
+    font = pygame.font.SysFont('lucidiaconsole', 30)        # provides font style and size of text
+    label = font.render('Next Shape:', 1, (255, 255, 255))      # text to display, antialiasing, and color of font
+
+    sx = top_left_x + play_width + 50       # provides top left position
+    sy = top_left_y + play_height/2 - 100       # provides top left position
+
+    form = piece.shape[piece.rotation % len(piece.shape)]     # gets the next piece
+
+    for y, line in enumerate(form):     # gets piece & its nested lists
+        row = list(line)
+        for x, column in enumerate(row):    # for each item in nested list
+            if column == '0':   # if 0 appears in item
+                pygame.draw.rect(surface, piece.color, (sx + x*block_size, sy + y*block_size, block_size, block_size), 0)
+                # draw the part
+
+    surface.blit(label, (sx + 10, sy - 30)) # draws the rectangular container to 'hold' next piece visually
 
 
 def draw_window(surface, grid):
@@ -355,18 +418,16 @@ def draw_window(surface, grid):
 
     for y in range(len(grid)):
         for x in range(len(grid[y])):
-            pygame.draw.rect(surface, grid[y][x], top_left_x + x*block_size, top_left_y + y*block_size, block_size,
-                             block_size, 0)
+            pygame.draw.rect(surface, grid[y][x], (top_left_x + x*block_size, top_left_y + y*block_size, block_size,
+                             block_size), 0)
             # Loops through every color in grid [y][x], the surface it draws to, and position, and fills shape with
             # color (not just border color); dynamic
             # In top left x position, whatever column you're in, multiply by block size, and that's x position (same
             # for y with rows)
 
-    pygame.draw.rect(surface, (255, 255, 255), (top_left_x, top_left_y, play_width, play_height, 5))
-    # draws grid border (where, color, parameters (x-axis start, y-axis start, width, height, thickness))
-
     draw_grid(surface, grid)    # creates the grid
-    pygame.display.update()     # updates screen with changes
+    pygame.draw.rect(surface, (255, 255, 255), (top_left_x, top_left_y, play_width, play_height), 4)
+    # draws grid border (where, color, parameters (x-axis start, y-axis start, width, height, thickness))
 
 
 def main(win):
@@ -387,6 +448,8 @@ def main(win):
     :return: None
     """
 
+    global grid
+
     locked_positions = {}
     grid = create_grid(locked_positions)
     change_piece = False
@@ -395,14 +458,14 @@ def main(win):
     next_piece = get_shape()
     clock = pygame.time.Clock()
     fall_time = 0
-    fall_speed = 0.27
 
     while run:  # while game is running
-        grid = create_grid(locked_positions)    # every time you move, chance to add to locked_positions, so update grid
+        fall_speed = 0.27
+        grid = create_grid(locked_positions)    # every time you move, change to add to locked_positions, so update grid
         fall_time += clock.get_rawtime()    # gets amount of time since last clock.tick()
         clock.tick()    # adds a tick to a timer/clock - makes it uniform to every OS
 
-        if fall_time/1000 > fall_speed:     # if the piece has been in a stationary position longer than the fall speed
+        if fall_time/1000 >= fall_speed:     # if the piece has been in a stationary position longer than the fall speed
             fall_time = 0   # resets fall_time
             current_piece.y += 1    # moves piece down 1 y increment
             if not(valid_space(current_piece, grid)) and current_piece.y > 0:
@@ -412,27 +475,31 @@ def main(win):
         for event in pygame.event.get():    # while something is happening
             if event.type == pygame.QUIT:   # if player decides to quit
                 run = False     # exits loop, stops game, exits window
+                pygame.display.quit()
+                quit()
 
             if event.type == pygame.KEYDOWN:    # if player pushes a key
                 if event.key == pygame.K_LEFT:  # if player pushes left arrow key specifically
                     current_piece.x -= 1    # move piece left one block
                     if not(valid_space(current_piece, grid)):   # if no space to move piece
-                        current_piece += 1  # undoes the left motion
+                        current_piece.x += 1  # undoes the left motion
 
-                if event.key == pygame.K_RIGHT:     # if player pushes right arrow key specifically
+                elif event.key == pygame.K_RIGHT:     # if player pushes right arrow key specifically
                     current_piece.x += 1    # move piece right one block
-                    if not(valid_space(current_piece, grid)):   # if no space to move piece
-                        current_piece -= 1  # undoes right motion
+                    if not (valid_space(current_piece, grid)):   # if no space to move piece
+                        current_piece.x -= 1  # undoes right motion
 
-                if event.key == pygame.K_DOWN:  # if player pushes down arrow key specifically
+                elif event.key == pygame.K_DOWN:  # if player pushes down arrow key specifically
                     current_piece.y += 1    # move piece down one block
                     if not(valid_space(current_piece, grid)):  # if no space to move piece
-                        current_piece -= 1  # undoes down motion
+                        current_piece.y -= 1  # undoes down motion
 
-                if event.key == pygame.K_UP:    # if player pushes up arrow key specifically
-                    current_piece.rotation += 1     # rotates the piece to next nested list position
+                elif event.key == pygame.K_UP:    # if player pushes up arrow key specifically
+                    current_piece.rotation = current_piece.rotation + 1 % len(current_piece.shape)
+                    # rotates the piece to next nested list position
                     if not(valid_space(current_piece, grid)):   # if no space on either side to rotate piece
-                        current_piece -= 1  # undoes rotation action
+                        current_piece.rotation = current_piece.rotation - 1 % len(current_piece.shape)
+                        # undoes rotation action
 
         piece_pos = convert_shape_format(current_piece)
 
@@ -448,16 +515,24 @@ def main(win):
             current_piece = next_piece
             next_piece = get_shape()
             change_piece = False
+            clear_rows(grid, locked_positions)  # only checks to remove row AFTER piece has become stationary
 
         draw_window(win, grid)  # updates window with player input & according actions
+        draw_next_shape(next_piece, win)    # updates window with next piece
+        pygame.display.update()     # displays window updates
 
         if check_lost(locked_positions):    # checks to see if game is lost; if so, breaks running while loop
             run = False
 
-    pygame.display.quit()
 
 def main_menu(win):
-    main()
+    """
+
+    :param win: shorthand for 'window'
+    :return: None
+    """
+
+    main(win)
 
 
 win = pygame.display.set_mode((s_width, s_height))
